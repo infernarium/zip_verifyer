@@ -343,6 +343,10 @@ docker-compose --project_name zip_tester down -v
 
 Запуске тестов осузествляется следующей командой
 
+```
+poetry pytest tests
+```
+
 # Общие результаты
 
 ## Получилось
