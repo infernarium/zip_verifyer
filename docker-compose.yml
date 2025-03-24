@@ -1,0 +1,119 @@
+networks:
+  zip_verifier_network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: zip_verifier_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - zip_verifier_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: zip_verifier_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server --address 0.0.0.0:9000 --console-address 0.0.0.0:9001 /data
+    volumes:
+      - minio_data:/data
+    networks:
+      - zip_verifier_network
+
+  redis:
+    image: redis:7
+    container_name: zip_verifier_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - zip_verifier_network
+
+  alembic:
+    build: .
+    container_name: zip_verifier_alembic
+    restart: on-failure:5
+    env_file: .env
+    depends_on:
+      - postgres
+    command: >
+      poetry run alembic upgrade head
+    networks:
+      - zip_verifier_network
+
+  fastapi:
+    build: .
+    container_name: zip_verifier_fastapi
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      alembic:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    command: >
+      poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - zip_verifier_network
+
+  celery:
+    build: .
+    container_name: zip_verifier_celery
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      fastapi:
+        condition: service_started
+      redis:
+        condition: service_started
+    command: >
+      poetry run celery -A app.services.celery worker -l info -P eventlet
+    networks:
+      - zip_verifier_network
+
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:22.0
+  #   container_name: zip_verifier_keycloak
+  #   command: start-dev
+  #   restart: unless-stopped
+  #   environment:
+  #     KC_DB: postgres
+  #     KC_DB_URL_HOST: postgres
+  #     KC_DB_URL_DATABASE: ${POSTGRES_DB}
+  #     KC_DB_USERNAME: ${POSTGRES_USER}
+  #     KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+  #     KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN}
+  #     KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+  #     KEYCLOAK_ADMIN: ${KC_ADMIN}
+  #     KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - zip_verifier_network
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
