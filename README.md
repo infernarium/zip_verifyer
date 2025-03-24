@@ -67,7 +67,7 @@
 ├ 📂 external_api - mock сервисы, эмулирующие получение характеристик архива
 │ ├ coverage.py - получение покрытия и багов
 │ ├ smells.py - получение запахов кода
-│ └ vulnerabilities.py - получение ???
+│ └ vulnerabilities.py - получение уязвимостей
 │
 ├ 📂 migrations - миграции Alembic
 │ ├ 📂 versions/ - файлы с версиями миграций
